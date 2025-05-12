@@ -14,6 +14,8 @@ load_dotenv()
 
 def image_size_distribution_eda(path, era, img_save_dir):
     results = []
+    over_four = 0
+    over_five = 0
 
     json_files = glob.glob(os.path.join(path, "*.json"))
     print(f"{path}에서 {len(json_files)}개의 JSON 파일을 찾았습니다.")
@@ -24,7 +26,10 @@ def image_size_distribution_eda(path, era, img_save_dir):
                 data = json.load(f)
                 width = data['meta']['images']['width']
                 height = data['meta']['images']['height']
-
+                if height >= 5000:
+                    over_five += 1
+                elif height >= 4000 and height < 5000:
+                    over_four += 1
                 results.append({
                     "width": width,
                     "height": height,
@@ -32,7 +37,8 @@ def image_size_distribution_eda(path, era, img_save_dir):
                 })
         except Exception as e:
             print(f"Error processing {json_file}: {e}")
-
+    
+    print(f'{era}에서 height가 5000 이상인 img 개수: {over_five}, 4000 이상 5000 이상인 개수: {over_four}')
     df = pd.DataFrame(results)
 
     plt.figure(figsize=(5, 4))
