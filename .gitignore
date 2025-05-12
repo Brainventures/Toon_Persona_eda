@@ -1,0 +1,9 @@
+JeongEunPark/.fonts/
+
+*.json
+
+
+*.sh
+*.log
+__pycache__/
+*.pyc
