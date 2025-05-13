@@ -1,6 +1,6 @@
 ## 이미지 크기 확인
 ### 이미지 크기 분포
-![image.png](attachment:994226d4-91a5-4647-8f3b-584687b31d06:image.png)
+![image (1)](https://github.com/user-attachments/assets/2a3a6d6a-bbb1-48a3-a5ea-87f8ba412411)
 생성기(generating), 증폭기(rising), 전환기(chaning)에서 width는 모두 1024로 동일했습니다.
 height는 대부분 1000 ~ 4000에서 분포하였습니다.
 4000 ~ 5000크기는 26개, 5000이상 크기는 1개 존재하였습니다.
