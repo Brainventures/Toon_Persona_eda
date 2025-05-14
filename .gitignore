@@ -2,6 +2,7 @@ JeongEunPark/.fonts/
 
 *.json
 
+*.ipynb
 
 *.sh
 *.log
