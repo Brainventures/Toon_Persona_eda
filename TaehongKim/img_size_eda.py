@@ -21,14 +21,18 @@ def image_size_distribution_eda(path, era, img_save_dir):
     print(f"{path}에서 {len(json_files)}개의 JSON 파일을 찾았습니다.")
 
     for json_file in tqdm(json_files, desc=f"Processing {os.path.basename(path)}"):
+        over_four = 0
+        over_five = 0
         try:
             with open(json_file, 'r') as f:
                 data = json.load(f)
                 width = data['meta']['images']['width']
                 height = data['meta']['images']['height']
                 if height >= 5000:
+                    print(f'5000이상: {json_file}')
                     over_five += 1
                 elif height >= 4000 and height < 5000:
+                    print(f'4000이상: {json_file}')
                     over_four += 1
                 results.append({
                     "width": width,
