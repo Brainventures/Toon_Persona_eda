@@ -1,1 +1,14 @@
+<<<<<<< HEAD
+JeongEunPark/.fonts/
+
+*.json
+
+*.ipynb
+
+*.sh
+*.log
+__pycache__/
+*.pyc
+=======
 .env
+>>>>>>> upstream/main
