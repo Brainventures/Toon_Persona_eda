@@ -41,8 +41,8 @@ def char_trait_distribution(path, era, img_save_dir):
                             s = char[key].split(',')
                             for item in s:
                                 # 특정 파일 로깅
-                                # if item == '단안경':
-                                    # print(f'특정한 파일: {json_file}')
+                                if item == '햄버거':
+                                    print(f'특정한 파일: {json_file}')
                                 key_values[key][item] += 1
                     char_data = {
                         "file": os.path.basename(json_file),
