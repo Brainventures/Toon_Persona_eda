@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 JeongEunPark/.fonts/
 
 *.json
@@ -9,6 +9,8 @@ JeongEunPark/.fonts/
 *.log
 __pycache__/
 *.pyc
-=======
+
 .env
->>>>>>> upstream/main
+*.csv
+*.pth
+checkpoint/
