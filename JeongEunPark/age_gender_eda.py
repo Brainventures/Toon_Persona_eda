@@ -10,7 +10,7 @@ from utils.font_setting import set_korean_font
 set_korean_font()
 
 # === 공통 함수 정의 ===
-def get_top_items(series, common_items=None, top_n=5):
+def get_top_items(series, common_items=None, top_n=10):
     raw = Counter(series)
     filtered = Counter([x for x in series if x not in (common_items or set())])
     return raw.most_common(top_n), filtered.most_common(top_n)
@@ -75,14 +75,14 @@ for subfolder in os.listdir(data_dir):
     # 히트맵 시각화
     draw_heatmap(
         shape_filtered_dist,
-        title=f"{subfolder} - 그룹별 비공통 Shape 빈도 (Top5 기준)",
-        filename=os.path.join(save_dir, f"{subfolder}_heatmap_shape_filtered.png"),
+        title=f"{subfolder} - 그룹별 비공통 Shape 빈도 (Top10 기준)",
+        filename=os.path.join(save_dir, f"{subfolder}_heatmap_shape_filtered_top10.png"),
         cmap="YlGnBu"
     )
     draw_heatmap(
         clothing_filtered_dist,
-        title=f"{subfolder} - 그룹별 비공통 Clothing 빈도 (Top5 기준)",
-        filename=os.path.join(save_dir, f"{subfolder}_heatmap_clothing_filtered.png"),
+        title=f"{subfolder} - 그룹별 비공통 Clothing 빈도 (Top10 기준)",
+        filename=os.path.join(save_dir, f"{subfolder}_heatmap_clothing_filtered_top10.png"),
         cmap="PuRd"
     )
 
