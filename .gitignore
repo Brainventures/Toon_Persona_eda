@@ -11,7 +11,12 @@ __pycache__/
 *.pyc
 
 .env
+
 *.csv
 *.pth
 checkpoint/
 output/
+
+
+test.py
+test_v2.py

@@ -42,6 +42,7 @@ class ImageCaptionDataset(Dataset):
             image = Image.open(image_path).convert('RGB')
             if self.transform:
                 image = self.transform(image)
+                
         except Exception as e:
             print(f"Error loading image {image_path}: {e}")
             # 빈 이미지로 대체
