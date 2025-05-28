@@ -49,6 +49,10 @@ class ImageCaptionDataset(Dataset):
             if self.transform:
                 image = self.transform(image)
         
+        print('caption: ', caption)
+        # 캡션을 BOS + caption + EOS 형태로 구성
+        caption_text = f"</s>{caption}</s>"  # BOS + caption + EOS
+        print('caption_text: ', caption_text)
         # 캡션 토큰화
         caption_encoded = self.tokenizer(
             caption,
@@ -111,7 +115,7 @@ class ImageCaptionModel(nn.Module):
         gpt_config = GPT2Config(
             vocab_size=vocab_size,
             n_embd=d_model,
-            n_layer=6,  # 레이어 수를 12에서 6으로 줄임 (메모리 절약)
+            n_layer=12,  # 레이어 수를 12에서 6으로 줄임 (메모리 절약)
             n_head=12,
             n_positions=max_seq_len,
             add_cross_attention=True,
@@ -134,36 +138,36 @@ class ImageCaptionModel(nn.Module):
         vision_features = expanded_features.view(expanded_features.size(0), 49, -1)  # [batch, 49, d_model]
         
         if caption_ids is not None:
-            # Training mode
+            # Training mode - Teacher Forcing
+            # 입력: BOS + caption (EOS 제외)
+            # 타겟: caption + EOS (BOS 제외)
+            input_ids = caption_ids[:, :-1]  # 마지막 토큰(EOS) 제외
+            target_ids = caption_ids[:, 1:]   # 첫 번째 토큰(BOS) 제외
+            input_mask = caption_mask[:, :-1]
+            
             # Text decoding with cross-attention
             text_outputs = self.text_decoder(
-                input_ids=caption_ids,
-                attention_mask=caption_mask,
+                input_ids=input_ids,
+                attention_mask=input_mask,
                 encoder_hidden_states=vision_features,
                 encoder_attention_mask=torch.ones(vision_features.shape[:2], device=vision_features.device),
                 return_dict=True
             )
             
-            # Loss 계산
-            if text_outputs.loss is not None:
-                return text_outputs.loss, text_outputs.logits
-            else:
-                # 수동으로 loss 계산
-                logits = text_outputs.logits
-                labels = caption_ids.clone()
-                labels[labels == self.pad_token_id] = -100
-                
-                # Shift labels for next token prediction
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-                
-                # Cross entropy loss 계산
-                loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-                loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                
-                return loss, logits
+            # Loss 계산 - 다음 토큰 예측
+            logits = text_outputs.logits
+            
+            # 타겟에서 패딩 토큰은 -100으로 설정 (loss 계산에서 제외)
+            target_ids = target_ids.clone()
+            target_ids[target_ids == self.pad_token_id] = -100
+            
+            # Cross entropy loss 계산
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(logits.view(-1, logits.size(-1)), target_ids.view(-1))
+            
+            return loss, logits
         else:
-            # Inference mode
+            # Inference mode - 이미지 특성만 반환
             return vision_features
 
 class ImageCaptionTrainer:
@@ -284,7 +288,10 @@ class ImageCaptionInference:
                                std=[0.229, 0.224, 0.225])
         ])
     
-    def generate_caption(self, image_path, max_length=50, temperature=0.7):
+    def generate_caption(self, image_path, max_length=50, temperature=0.8, top_k=50, top_p=0.9):
+        """
+        개선된 캡션 생성 함수 - Top-k, Top-p 샘플링 적용
+        """
         # 이미지 로드 및 전처리
         image = Image.open(image_path).convert('RGB')
         image = self.transform(image).unsqueeze(0).to(self.device)
@@ -293,11 +300,8 @@ class ImageCaptionInference:
             # Vision features 추출
             vision_features = self.model(image)
             
-            # 캡션 생성
-            if self.tokenizer.bos_token_id:
-                generated_ids = [self.tokenizer.bos_token_id]
-            else:
-                generated_ids = [self.tokenizer.eos_token_id]
+            # BOS 토큰으로 시작
+            generated_ids = [self.tokenizer.bos_token_id if self.tokenizer.bos_token_id else self.tokenizer.eos_token_id]
             
             for _ in range(max_length):
                 input_ids = torch.tensor([generated_ids]).to(self.device)
@@ -310,10 +314,34 @@ class ImageCaptionInference:
                     use_cache=False
                 )
                 
-                logits = outputs.logits[0, -1, :] / temperature
+                logits = outputs.logits[0, -1, :]
+                
+                # Temperature scaling
+                logits = logits / temperature
+                
+                # Top-k 필터링
+                if top_k > 0:
+                    top_k_logits, top_k_indices = torch.topk(logits, min(top_k, logits.size(-1)))
+                    logits[logits < top_k_logits[-1]] = float('-inf')
+                
+                # Top-p (nucleus) 필터링
+                if top_p < 1.0:
+                    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+                    cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+                    
+                    # top_p 임계값을 넘는 토큰들 제거
+                    sorted_indices_to_remove = cumulative_probs > top_p
+                    sorted_indices_to_remove[1:] = sorted_indices_to_remove[:-1].clone()
+                    sorted_indices_to_remove[0] = 0
+                    
+                    indices_to_remove = sorted_indices_to_remove.scatter(0, sorted_indices, sorted_indices_to_remove)
+                    logits[indices_to_remove] = float('-inf')
+                
+                # 샘플링
                 probs = torch.softmax(logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).item()
                 
+                # EOS 토큰이면 생성 종료
                 if next_token == self.tokenizer.eos_token_id:
                     break
                 
@@ -328,19 +356,12 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    # ResNet 타입 선택 (resnet18, resnet34, resnet50, resnet101, resnet152)
-    resnet_type = 'resnet50'  # 원하는 ResNet 모델로 변경 가능
+    # ResNet 타입 선택
+    resnet_type = 'resnet50'
     print(f"Using ResNet type: {resnet_type}")
     
     # 데이터 경로 설정
     csv_file = "/home/thkim/dev/eda/Toon_Persona_eda/toon_caption_dataset.csv"
-    image_dirs = [
-        "/HDD/toon_persona/Training/origin/TL_01. 생성기",
-        "/HDD/toon_persona/Training/origin/TL_02. 증폭기", 
-        "/HDD/toon_persona/Training/origin/TL_03. 전환기"
-    ]
-    
-    # 모든 이미지 경로를 하나로 통합
     all_image_dir = "/HDD/toon_persona/Training/origin"
     
     # 토크나이저 로드
@@ -356,48 +377,47 @@ def main():
                            std=[0.229, 0.224, 0.225])
     ])
     
-    # 데이터셋 로드 (5000개로 제한)
+    # 데이터셋 로드
     df = pd.read_csv(csv_file)
+    print(f"전체 데이터: {len(df)}개")
     
-    # 전체 데이터에서 5000개만 샘플링
+    # 데이터 샘플링 (테스트용)
     if len(df) > 100:
-        df = df.sample(n=500, random_state=42).reset_index(drop=True)
-        print(f"데이터를 500개로 제한했습니다. (원본: {len(pd.read_csv(csv_file))}개)")
-    else:
-        print(f"전체 데이터가 {len(df)}개입니다.")
+        df = df.sample(n=100, random_state=42).reset_index(drop=True)
+        print(f"데이터를 100개로 제한했습니다.")
     
     # 8:2로 분할
     train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
     print(f"훈련 데이터: {len(train_df)}개, 검증 데이터: {len(val_df)}개")
     
     # 임시 CSV 파일 생성
-    train_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/train_temp.csv", index=False)
-    val_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/val_temp.csv", index=False)
+    train_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/train_test_temp.csv", index=False)
+    val_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/val_test_temp.csv", index=False)
     
     # 데이터로더 생성
-    train_dataset = ImageCaptionDataset("/home/thkim/dev/eda/Toon_Persona_eda/train_temp.csv", all_image_dir, tokenizer, transform)
-    val_dataset = ImageCaptionDataset("/home/thkim/dev/eda/Toon_Persona_eda/val_temp.csv", all_image_dir, tokenizer, transform)
+    train_dataset = ImageCaptionDataset("/home/thkim/dev/eda/Toon_Persona_eda/train_test_temp.csv", all_image_dir, tokenizer, transform)
+    val_dataset = ImageCaptionDataset("/home/thkim/dev/eda/Toon_Persona_eda/val_test_temp.csv", all_image_dir, tokenizer, transform)
     
-    batch_size = 4
+    batch_size = 16  # 메모리 절약을 위해 배치 크기 줄임
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
     
-    # 모델 초기화 (ResNet 타입 지정)
+    # 모델 초기화
     model = ImageCaptionModel(vocab_size=tokenizer.vocab_size, resnet_type=resnet_type)
     
     # 트레이너 초기화 및 학습
     trainer = ImageCaptionTrainer(model, tokenizer, train_loader, val_loader, device)
-    # trainer.train(epochs=10, save_path="/home/thkim/dev/eda/Toon_Persona_eda/best_resnet_caption_model.pth")
+    # trainer.train(epochs=10, save_path="/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_test_model.pth")
     
     # 손실 그래프 출력
     trainer.plot_losses()
     
     # 추론 예제
     print("\n=== 추론 예제 ===")
-    inference = ImageCaptionInference("/home/thkim/dev/eda/Toon_Persona_eda/best_resnet_caption_model.pth", device, resnet_type)
+    inference = ImageCaptionInference("/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_test_model.pth", device, resnet_type)
     
     # 테스트 이미지로 캡션 생성
-    test_images = val_df.head(5)
+    test_images = val_df.head(10)
     for idx, row in test_images.iterrows():
         image_path = os.path.join(all_image_dir, row['origin'])
         if os.path.exists(image_path):
@@ -408,8 +428,8 @@ def main():
             print("-" * 50)
     
     # 임시 파일 정리
-    os.remove("/home/thkim/dev/eda/Toon_Persona_eda/train_temp.csv")
-    os.remove("/home/thkim/dev/eda/Toon_Persona_eda/val_temp.csv")
+    os.remove("/home/thkim/dev/eda/Toon_Persona_eda/train_test_temp.csv")
+    os.remove("/home/thkim/dev/eda/Toon_Persona_eda/val_test_temp.csv")
 
 if __name__ == "__main__":
     main()
