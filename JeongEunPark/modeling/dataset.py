@@ -42,4 +42,3 @@ class CustomDataset(Dataset):
             img = Image.new("RGB", (224, 224))
         img = self.transform(img)
         caption_tensor = self.get_input_ids(caption)
-        return img, caption_tensor
