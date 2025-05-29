@@ -1,63 +1,55 @@
 import torch
 from PIL import Image
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
-from modeling import EncoderCNN, DecoderRNN
-from preprocess import Vocab, normalize_caption
-import csv
-import os
+from transformers import PreTrainedTokenizerFast
+from model import EncoderCNN, DecoderRNN
 
-
-def build_vocab_from_csv(csv_path, max_samples=100):
-    captions = []
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        next(reader)
-        for row in reader:
-            captions.append(normalize_caption(row[1]))
-            if len(captions) >= max_samples:
-                break
-    vocab = Vocab()
-    for cap in captions:
-        vocab.build_vocab(cap)
-    return vocab
-
-
-def generate_caption(image_path, encoder_path, decoder_path, vocab, device):
+def generate_caption(image_path, encoder, decoder, tokenizer, device, max_length=82):
     transform = Compose([
         Resize((224, 224), antialias=True),
         ToTensor(),
-        Normalize(mean=[0.485, 0.456, 0.406],
+        Normalize(mean=[0.485, 0.456, 0.406], 
                   std=[0.229, 0.224, 0.225])
     ])
+    image = Image.open(image_path).convert('RGB')
+    image = transform(image).unsqueeze(0).to(device)
 
-    image = Image.open(image_path).convert("RGB")
-    image_tensor = transform(image).unsqueeze(0).to(device)
-
-    embed_size = 256
-    hidden_size = 512
-    vocab_size = vocab.nwords
-
-    encoder = EncoderCNN(embed_size).to(device)
-    decoder = DecoderRNN(embed_size, hidden_size, vocab_size).to(device)
-
-    encoder.load_state_dict(torch.load(encoder_path))
-    decoder.load_state_dict(torch.load(decoder_path))
     encoder.eval()
     decoder.eval()
-
+    # 이미지 임베딩
     with torch.no_grad():
-        features = encoder(image_tensor)
-        hidden = features.unsqueeze(0)
-        input_token = torch.tensor([[vocab.word2index['SOS']]], device=device, dtype=torch.long)
-        generated = []
+        features = encoder(image)  # [1, embed_size]
+        generated = [tokenizer.bos_token_id]  # 시작 토큰
 
-        for _ in range(30):
-            output, hidden = decoder.decode_step(input_token, hidden)
-            predicted_id = output.argmax(-1)
-            word = vocab.index2word[predicted_id.item()]
-            if word == 'EOS':
+        for _ in range(max_length):
+            input_ids = torch.tensor([generated]).to(device)  # [1, T]
+            attention_mask = torch.ones_like(input_ids).to(device)
+
+            outputs = decoder(
+                features, input_ids,
+                attention_mask=attention_mask
+            )
+            next_token_logits = outputs.logits[:, -1, :]  # [1, vocab_size]
+            next_token = torch.argmax(next_token_logits, dim=-1).item()
+
+            if next_token == tokenizer.eos_token_id:
                 break
-            generated.append(word)
-            input_token = predicted_id
+            generated.append(next_token)
 
-    return " ".join(generated)
+    # 토큰 시퀀스를 텍스트로 변환
+    caption = tokenizer.decode(generated, skip_special_tokens=True)
+    return caption
+
+    # def build_vocab_from_csv(csv_path, max_samples=100):
+#     captions = []
+#     with open(csv_path, 'r', encoding='utf-8') as f:
+#         reader = csv.reader(f)
+#         next(reader)
+#         for row in reader:
+#             captions.append(normalize_caption(row[1]))
+#             if len(captions) >= max_samples:
+#                 break
+#     vocab = Vocab()
+#     for cap in captions:
+#         vocab.build_vocab(cap)
+#     return vocab
