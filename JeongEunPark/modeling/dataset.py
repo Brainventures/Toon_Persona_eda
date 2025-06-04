@@ -26,18 +26,6 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.captions_list)
 
-    # def get_input_ids(self, sentence):
-    #     input_ids = [0] * (self.max_cap_length + 2)
-    #     i = 1
-    #     for word in sentence.split(" "):
-    #         input_ids[i] = self.vocab.word2index.get(word, self.vocab.word2index['EOS'])
-    #         i += 1
-    #         if i >= self.max_cap_length + 1:
-    #             break
-    #     input_ids[0] = self.vocab.word2index['SOS']
-    #     input_ids[i] = self.vocab.word2index['EOS']
-    #     return torch.tensor(input_ids)
-
     def __getitem__(self, idx):
         img_path = self.img_filenames_list[idx]
         try:
@@ -58,4 +46,4 @@ class CustomDataset(Dataset):
         input_ids = tokenized["input_ids"].squeeze(0)
         attention_mask = tokenized["attention_mask"].squeeze(0)
 
-        return image, input_ids, attention_mask
+        return image, input_ids, attention_mask, img_path

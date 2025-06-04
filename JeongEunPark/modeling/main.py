@@ -1,5 +1,6 @@
 import csv
 import torch
+import pandas as pd
 from torch.utils.data import DataLoader, random_split
 from pathlib import Path
 from preprocess import normalize_caption, Vocab
@@ -13,10 +14,11 @@ from transformers import PreTrainedTokenizerFast
 
 CSV_PATH = "/home/jepark/dev/Toon_Persona_eda/JeongEunPark/modeling/toon_caption.csv"
 BATCH_SIZE = 16
-MAX_SAMPLES = 5000 # 불러올 데이터 개수
-NUM_EPOCHS = 5
+MAX_SAMPLES = 40000 # 불러올 데이터 개수
+NUM_EPOCHS = 50
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TOKENIZER_NAME = "skt/kogpt2-base-v2"
+SEED = 42
 
 # Load data
 img_filenames_list = []
@@ -59,7 +61,7 @@ full_dataset = CustomDataset(
     max_cap_length=max_cap_length
 )
 
-train_dataset, test_dataset = random_split(full_dataset, [0.9, 0.1])
+train_dataset, test_dataset = random_split(full_dataset, [0.9, 0.1], generator=torch.Generator().manual_seed(SEED))
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True) # 여러 개의 샘플을 모아서 미니 배치 생성
 test_dataloader = DataLoader(test_dataset, batch_size=1)
 
@@ -67,21 +69,38 @@ print("전체 데이터 수:", len(full_dataset))
 print("학습 데이터 수:", len(train_dataset))
 print("테스트 데이터 수:", len(test_dataset))
 
+# # test dataset 저장
+# # Subset의 인덱스에 접근
+# test_indices = test_dataset.indices
+
+# # 원본 데이터셋에서 인덱스로 접근해 추출
+# test_img_paths = [img_filenames_list[i] for i in test_indices]
+# test_captions = [captions_list[i] for i in test_indices]
+
+# test_df = pd.DataFrame({
+#     "img_path": test_img_paths,
+#     "caption": test_captions
+# })
+# test_df.to_csv("test_data.csv", index=False, encoding="utf-8-sig")
+# print(f"✅ 테스트셋 CSV 저장 완료: test_data.csv")
+
 EMBED_SIZE = 256
 # HIDDEN_SIZE = 512
 # VOCAB_SIZE = vocab.nwords
 
 encoder = EncoderCNN(EMBED_SIZE).to(DEVICE)
 decoder = DecoderRNN(EMBED_SIZE, model_name=TOKENIZER_NAME).to(DEVICE)
+decoder.kogpt2.resize_token_embeddings(len(tokenizer))
 
 print("모델 초기화 완료")
 print(f"Encoder: {encoder.__class__.__name__}")
 print(f"Decoder: {decoder.__class__.__name__}")
 
 optimizer = optim.AdamW(
-    list(encoder.parameters()) + list(decoder.parameters()),
-    lr=5e-5,
-    weight_decay=0.01 # 모델이 학습 데이터에만 너무 잘 맞고, 테스트 성능이 떨어질 때 넣어주는게 안전
+    # list(encoder.parameters()) + list(decoder.parameters()),
+    decoder.parameters(),
+    lr=5e-5
+    # weight_decay=0.01 # 모델이 학습 데이터에만 너무 잘 맞고, 테스트 성능이 떨어질 때 넣어주는게 안전
 )
 
 train_model(
@@ -100,9 +119,9 @@ train_model(
 # torch.save(encoder.state_dict(), "state_dict/encoder_epoch_0.pt")
 # torch.save(decoder.state_dict(), "state_dict/decoder_epoch_0.pt")
 
-print("\n 추론 결과 (샘플 3개):")
-for i in range(3):  # 예시로 3개 추론
-    img_path = img_filenames_list[i]
+print("\n 추론 결과 (샘플 5개):")
+for i in range(5):  # 예시로 3개 추론
+    img_path = test_dataset[i][0]
     caption = generate_caption(
         image_path=img_path,
         encoder=encoder,
