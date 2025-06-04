@@ -6,22 +6,6 @@ def normalize_caption(text):
     text = re.sub(r"[^가-힣0-9.,!? ]+", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
-# oct = Okt()
-
-# def clean_korean_text(text):
-#     text = re.sub(r"[^가-힣0-9.,!? ]+", "", text)
-#     text = re.sub(r"\s+", " ", text).strip()
-#     return text
-
-# def normalize_caption(text):
-#     text = clean_korean_text(text)
-#     tokens = oct.morphs(text)
-#     return " ".join(tokens)
-
-# def normalize_caption(text):
-#     text = re.sub(r"\s+", " ", text.strip())          # 공백 정리
-#     text = re.sub(r"([.!?])", r" \1", text)           # 문장 부호 분리
-#     return text
 
 class Vocab:
     def __init__(self):

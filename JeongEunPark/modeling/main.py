@@ -35,14 +35,6 @@ with open(CSV_PATH, 'r', encoding='utf-8') as f:
 
 print(f"총 {len(captions_list)}개 캡션 로드 완료")
 
-# # vocab
-# vocab = Vocab()
-# for caption in captions_list:
-#     vocab.build_vocab(caption)
-
-# print(f"\nVocab 크기: {vocab.nwords}")
-
-# max caption length
 max_cap_length = max(len(c.split(" ")) for c in captions_list)
 
 print(f"최대 캡션 길이: {max_cap_length}")
@@ -98,7 +90,7 @@ print(f"Decoder: {decoder.__class__.__name__}")
 
 optimizer = optim.AdamW(
     # list(encoder.parameters()) + list(decoder.parameters()),
-    decoder.parameters(),
+    deer.parameters(),
     lr=5e-5
     # weight_decay=0.01 # 모델이 학습 데이터에만 너무 잘 맞고, 테스트 성능이 떨어질 때 넣어주는게 안전
 )
@@ -113,21 +105,15 @@ train_model(
     # learning_rate=1e-3 
 )
 
-# # 모델 저장
-# if not os.path.exists("state_dict"):
-#     os.makedirs("state_dict")
-# torch.save(encoder.state_dict(), "state_dict/encoder_epoch_0.pt")
-# torch.save(decoder.state_dict(), "state_dict/decoder_epoch_0.pt")
-
-print("\n 추론 결과 (샘플 5개):")
-for i in range(5):  # 예시로 3개 추론
-    img_path = test_dataset[i][0]
-    caption = generate_caption(
-        image_path=img_path,
-        encoder=encoder,
-        decoder=decoder,
-        tokenizer=tokenizer,
-        device=DEVICE
-    )
-    print(f"\n이미지: {img_path}")
-    print(f"생성된 캡션: {caption}")
+# print("\n 추론 결과 (샘플 5개):")
+# for i in range(5):  # 예시로 3개 추론
+#     img_path = test_dataset[i][0]
+#     caption = generate_caption(
+#         image_path=img_path,
+#         encoder=encoder,
+#         decoder=decoder,
+#         tokenizer=tokenizer,
+#         device=DEVICE
+#     )
+#     print(f"\n이미지: {img_path}")
+#     print(f"생성된 캡션: {caption}")
