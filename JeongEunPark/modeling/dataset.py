@@ -35,7 +35,10 @@ class CustomDataset(Dataset):
         image = self.transform(image)
 
         caption = self.captions_list[idx]
-        caption_with_token = f"</s>{caption}</s>"
+        bos_token = self.tokenizer.bos_token or ""
+        eos_token = self.tokenizer.eos_token or ""
+
+        caption_with_token = f"{bos_token}{caption}{eos_token}"
         tokenized = self.tokenizer(
             caption_with_token,
             max_length = self.max_cap_length,
