@@ -17,7 +17,7 @@ __pycache__/
 checkpoint/
 output/
 
-
+*.png
 
 test.py
 test_v2.py
