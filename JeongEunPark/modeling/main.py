@@ -13,9 +13,9 @@ from torch import optim
 from transformers import PreTrainedTokenizerFast
 
 CSV_PATH = "/home/jepark/dev/Toon_Persona_eda/JeongEunPark/modeling/toon_caption.csv"
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 MAX_SAMPLES = 40000 # 불러올 데이터 개수
-NUM_EPOCHS = 50
+NUM_EPOCHS = 70
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TOKENIZER_NAME = "skt/kogpt2-base-v2"
 SEED = 42
@@ -53,28 +53,13 @@ full_dataset = CustomDataset(
     max_cap_length=max_cap_length
 )
 
-train_dataset, test_dataset = random_split(full_dataset, [0.9, 0.1], generator=torch.Generator().manual_seed(SEED))
+train_dataset, val_dataset = random_split(full_dataset, [0.9, 0.1], generator=torch.Generator().manual_seed(SEED))
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True) # 여러 개의 샘플을 모아서 미니 배치 생성
-test_dataloader = DataLoader(test_dataset, batch_size=1)
+val_dataloader = DataLoader(val_dataset, batch_size=1)
 
 print("전체 데이터 수:", len(full_dataset))
 print("학습 데이터 수:", len(train_dataset))
-print("테스트 데이터 수:", len(test_dataset))
-
-# # test dataset 저장
-# # Subset의 인덱스에 접근
-# test_indices = test_dataset.indices
-
-# # 원본 데이터셋에서 인덱스로 접근해 추출
-# test_img_paths = [img_filenames_list[i] for i in test_indices]
-# test_captions = [captions_list[i] for i in test_indices]
-
-# test_df = pd.DataFrame({
-#     "img_path": test_img_paths,
-#     "caption": test_captions
-# })
-# test_df.to_csv("test_data.csv", index=False, encoding="utf-8-sig")
-# print(f"✅ 테스트셋 CSV 저장 완료: test_data.csv")
+print("테스트 데이터 수:", len(val_dataset))
 
 EMBED_SIZE = 256
 # HIDDEN_SIZE = 512
@@ -89,16 +74,16 @@ print(f"Encoder: {encoder.__class__.__name__}")
 print(f"Decoder: {decoder.__class__.__name__}")
 
 optimizer = optim.AdamW(
-    # list(encoder.parameters()) + list(decoder.parameters()),
-    deer.parameters(),
-    lr=5e-5
-    # weight_decay=0.01 # 모델이 학습 데이터에만 너무 잘 맞고, 테스트 성능이 떨어질 때 넣어주는게 안전
-)
+    list(encoder.parameters()) + list(decoder.parameters()),
+    lr=5e-4,
+    weight_decay=0.01 # 모델이 학습 데이터에만 너무 잘 맞고, 테스트 성능이 떨어질 때 넣어주는게 안전
+) # 스케줄링 기법 사용
 
 train_model(
     encoder=encoder,
     decoder=decoder,
-    dataloader=train_dataloader,
+    train_dataloader=train_dataloader,
+    val_dataloader=val_dataloader,
     optimizer = optimizer,
     device=DEVICE,
     num_epochs=NUM_EPOCHS,
