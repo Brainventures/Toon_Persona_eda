@@ -1,7 +1,8 @@
+import sys, os
 import torch
 import pandas as pd
-import os
 from resnet_modev_training_v2 import ImageCaptionInference
+
 
 
 test_csv_file = "/home/thkim/dev/eda/Toon_Persona_eda/toon_caption_metric_test_dataset.csv"
@@ -21,4 +22,4 @@ for idx, row in test_df.iterrows():
 
 pred_df = pd.DataFrame(test_df, columns=['origin','caption'])
 pred_df['predict'] = caption_list
-pred_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/output.csv", index=False)
+pred_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/output_v2.csv", index=False)

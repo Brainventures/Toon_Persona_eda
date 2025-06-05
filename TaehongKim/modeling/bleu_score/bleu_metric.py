@@ -103,7 +103,7 @@ def analyze_individual_scores(individual_scores, top_n=10):
 # 사용 예시
 if __name__ == "__main__":
     # CSV 파일 경로를 여기에 입력하세요
-    csv_file_path = "/home/thkim/dev/eda/Toon_Persona_eda/output.csv"  # 실제 파일 경로로 변경
+    csv_file_path = "/home/thkim/dev/eda/Toon_Persona_eda/output_v2.csv"  # 실제 파일 경로로 변경
     
     try:
         results, individual_scores = calculate_bleu_scores(csv_file_path)
@@ -111,10 +111,10 @@ if __name__ == "__main__":
         analyze_individual_scores(individual_scores)
         
         # 결과를 CSV로 저장하고 싶다면
-        # df_results = pd.DataFrame({
-        #     'individual_bleu_scores': individual_scores
-        # })
-        # df_results.to_csv('bleu_scores_results.csv', index=False)
+        df_results = pd.DataFrame({
+            'individual_bleu_scores': individual_scores
+        })
+        df_results.to_csv('bleu_scores_results_v4.csv', index=False)
         
     except FileNotFoundError:
         print(f"파일을 찾을 수 없습니다: {csv_file_path}")

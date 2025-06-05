@@ -11,7 +11,7 @@ import torchvision.models as models
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split    
 
 # 한국어 GPT-2 모델 사용을 위한 설정
 MODEL_NAME = "skt/kogpt2-base-v2"
@@ -132,8 +132,7 @@ class ImageCaptionModel(nn.Module):
         
     def forward(self, images, caption_ids=None, caption_mask=None):
         # Vision encoding with ResNet (frozen)
-        with torch.no_grad() if hasattr(self, '_frozen_resnet') else torch.enable_grad():
-            vision_features = self.vision_encoder(images)  # [batch, resnet_dim]
+        vision_features = self.vision_encoder(images)  # [batch, resnet_dim]
         
         # Vision features를 GPT-2 차원으로 projection
         vision_features = self.vision_projection(vision_features)  # [batch, d_model]
@@ -184,12 +183,12 @@ class EarlyStopping:
         self.counter = 0
         self.best_weights = None
         
-    def __call__(self, val_loss, model):
+    def __call__(self, train_loss, model):
         if self.best_loss is None:
-            self.best_loss = val_loss
+            self.best_loss = train_loss
             self.save_checkpoint(model)
-        elif val_loss < self.best_loss - self.min_delta:
-            self.best_loss = val_loss
+        elif train_loss < self.best_loss - self.min_delta:
+            self.best_loss = train_loss
             self.counter = 0
             self.save_checkpoint(model)
         else:
@@ -205,7 +204,7 @@ class EarlyStopping:
         self.best_weights = model.state_dict().copy()
 
 class ImageCaptionTrainer:
-    def __init__(self, model, tokenizer, train_loader, val_loader, device, lr=5e-5, patience=7):
+    def __init__(self, model, tokenizer, train_loader, val_loader, device, lr=1e-3, patience=7):
         self.model = model.to(device)
         self.tokenizer = tokenizer
         self.train_loader = train_loader
@@ -219,7 +218,7 @@ class ImageCaptionTrainer:
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
         
         # Early stopping 초기화
-        self.early_stopping = EarlyStopping(patience=patience, min_delta=1e-4)
+        self.early_stopping = EarlyStopping(patience=patience, min_delta=1e-3)
         
         self.train_losses = []
         self.val_losses = []
@@ -261,7 +260,7 @@ class ImageCaptionTrainer:
         return total_loss / len(self.val_loader)
     
     def train(self, epochs=50, save_path="image_caption_model.pth"):
-        best_val_loss = float('inf')
+        best_train_loss = float('inf')
         
         for epoch in range(epochs):
             print(f"Epoch {epoch+1}/{epochs}")
@@ -275,21 +274,21 @@ class ImageCaptionTrainer:
             print(f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             
             # 최고 성능 모델 저장
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
+            if train_loss < best_train_loss:
+                best_train_loss = train_loss
                 torch.save({
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'tokenizer': self.tokenizer,
                     'epoch': epoch,
-                    'val_loss': val_loss
+                    'train_loss': train_loss
                 }, save_path)
                 print(f"Best model saved with val_loss: {val_loss:.4f}")
             
             # Early stopping 체크
-            if self.early_stopping(val_loss, self.model):
+            if self.early_stopping(train_loss, self.model):
                 print(f"Early stopping triggered at epoch {epoch+1}")
-                print(f"Best validation loss: {self.early_stopping.best_loss:.4f}")
+                print(f"Best train loss: {self.early_stopping.best_loss:.4f}")
                 break
             
             self.scheduler.step()
@@ -434,10 +433,10 @@ def main():
     df = pd.read_csv(csv_file)
     print(f"전체 데이터: {len(df)}개")
     
-    # 데이터 샘플링 (테스트용)
+    # 데이터 샘플링 (테스트용 총 42897개)
     if len(df) > 100:
         df = df.sample(n=42897, random_state=42).reset_index(drop=True)
-        print(f"데이터를 42897개로 제한했습니다.")
+        print(f"데이터를 42897 제한했습니다.")
     
     # 8:2로 분할
     train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
@@ -459,19 +458,19 @@ def main():
     model = ImageCaptionModel(vocab_size=tokenizer.vocab_size, resnet_type=resnet_type, freeze_resnet=True)
     
     # 트레이너 초기화 및 학습 (patience로 early stopping 설정)
-    trainer = ImageCaptionTrainer(model, tokenizer, train_loader, val_loader, device, patience=3)
+    trainer = ImageCaptionTrainer(model, tokenizer, train_loader, val_loader, device, patience=13)
     trainer.train(epochs=50, save_path="/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model.pth")
     
     # 손실 그래프 출력
     loss_plot_path = "/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/training_losses.png"
-    trainer.plot_losses(loss_plot_path)
+    # trainer.plot_losses(loss_plot_path)
     
     # 추론 예제
     print("\n=== 추론 예제 ===")
     inference = ImageCaptionInference("/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model.pth", device, resnet_type)
     
     # 테스트 이미지로 캡션 생성
-    test_images = val_df.head(3)
+    test_images = val_df.head(10)
     for idx, row in test_images.iterrows():
         image_path = os.path.join(all_image_dir, row['origin'])
         if os.path.exists(image_path):
