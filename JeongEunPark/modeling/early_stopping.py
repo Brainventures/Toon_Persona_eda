@@ -30,7 +30,7 @@ class EarlyStopping:
                 self.early_stop = True
 
     def save_checkpoint(self, encoder, decoder):
-        torch.save(encoder.state_dict(), os.path.join(self.path, "encoder_best_ep70.pt"))
-        torch.save(decoder.state_dict(), os.path.join(self.path, "decoder_best_ep70.pt"))
+        torch.save(encoder.state_dict(), os.path.join(self.path, "encoder_best_ep70_pt3.pt"))
+        torch.save(decoder.state_dict(), os.path.join(self.path, "decoder_best_ep70_pt3.pt"))
         if self.verbose:
             print(f"✅ Validation loss improved. Saved models to '{self.path}'")

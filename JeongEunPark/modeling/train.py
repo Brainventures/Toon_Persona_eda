@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, device, num_epochs=1, patience=10, save_dir="state_dict"):
     os.makedirs(save_dir, exist_ok=True)
 
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
     early_stopper = EarlyStopping(patience=5, path=save_dir)
 
     # 학습 및 검증 손실을 저장할 리스트
@@ -71,7 +71,7 @@ def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, d
     plt.ylabel('Loss')
     plt.title('Training and Validation Loss')
     plt.legend()
-    plt.savefig('loss_plot_ep70.png') 
+    plt.savefig('loss_plot_ep70_p3.png') 
 
 def evaluate_model(encoder, decoder, val_dataloader, device):
     encoder.eval()

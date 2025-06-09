@@ -75,7 +75,7 @@ print(f"Decoder: {decoder.__class__.__name__}")
 
 optimizer = optim.AdamW(
     list(encoder.parameters()) + list(decoder.parameters()),
-    lr=5e-4,
+    lr=5e-5,
     weight_decay=0.01 # 모델이 학습 데이터에만 너무 잘 맞고, 테스트 성능이 떨어질 때 넣어주는게 안전
 ) # 스케줄링 기법 사용
 
