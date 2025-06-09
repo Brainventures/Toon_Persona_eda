@@ -31,10 +31,10 @@ class EncoderCNN(nn.Module):
 
 # KoGP2로 변경 
 class DecoderRNN(nn.Module):
-    def __init__(self, embed_size, model_name='skt/kogpt2-base-v2'): # config 설정
+    def __init__(self, embed_size, tokenizer, model_name='skt/kogpt2-base-v2'): # config 설정
         super().__init__()
         self.kogpt2 = GPT2LMHeadModel.from_pretrained(model_name)
-        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(model_name)
+        self.tokenizer = tokenizer
         self.image_proj = nn.Linear(embed_size, self.kogpt2.config.n_embd) # 이미지 임베딩을 KoGPT의 hidden size로 변환
 
     """

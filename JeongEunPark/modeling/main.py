@@ -7,15 +7,16 @@ from preprocess import normalize_caption, Vocab
 from dataset import CustomDataset
 from model import EncoderCNN, DecoderRNN
 from train import train_model 
-from inference import generate_caption
+from inference import generate_captions_for_valset
 import json, os
 from torch import optim
 from transformers import PreTrainedTokenizerFast
+from evaluate import compute_bleu, compute_rouge
 
 CSV_PATH = "/home/jepark/dev/Toon_Persona_eda/JeongEunPark/modeling/toon_caption.csv"
 BATCH_SIZE = 32
 MAX_SAMPLES = 40000 # 불러올 데이터 개수
-NUM_EPOCHS = 70
+NUM_EPOCHS = 80
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TOKENIZER_NAME = "skt/kogpt2-base-v2"
 SEED = 42
@@ -66,7 +67,7 @@ EMBED_SIZE = 256
 # VOCAB_SIZE = vocab.nwords
 
 encoder = EncoderCNN(EMBED_SIZE).to(DEVICE)
-decoder = DecoderRNN(EMBED_SIZE, model_name=TOKENIZER_NAME).to(DEVICE)
+decoder = DecoderRNN(EMBED_SIZE, tokenizer=tokenizer, model_name=TOKENIZER_NAME).to(DEVICE)
 decoder.kogpt2.resize_token_embeddings(len(tokenizer))
 
 print("모델 초기화 완료")
@@ -90,7 +91,35 @@ train_model(
     # learning_rate=1e-3 
 )
 
-# print("\n 추론 결과 (샘플 5개):")
+print("\n 추론 결과 (샘플 5개):")
+samples = generate_captions_for_valset(
+    val_dataloader=val_dataloader,
+    encoder=encoder,
+    decoder=decoder,
+    tokenizer=tokenizer,
+    device=DEVICE,
+    num_samples=5
+)
+
+references = []
+predictions = []
+
+for i, (ref, pred, img_path) in enumerate(samples):
+    print(f"[{i+1}]")
+    print(f"Image Path : {img_path}")
+    print(f"Ref Caption: {ref}")
+    print(f"Predicted  : {pred}\n")
+    references.append(ref)
+    predictions.append(pred)
+
+# BLEU & ROUGE 평가
+print("\n[평가 결과]")
+bleu_score = compute_bleu(references, predictions)
+rouge1, rougel = compute_rouge(references, predictions)
+
+print(f"BLEU Score   : {bleu_score:.4f}")
+print(f"ROUGE-1 F1   : {rouge1:.4f}")
+print(f"ROUGE-L F1   : {rougel:.4f}")
 # for i in range(5):  # 예시로 3개 추론
 #     img_path = test_dataset[i][0]
 #     caption = generate_caption(

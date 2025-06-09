@@ -6,12 +6,19 @@ import os
 import matplotlib.pyplot as plt
 from early_stopping import EarlyStopping
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import datetime
 
-def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, device, num_epochs=1, patience=10, save_dir="state_dict"):
-    os.makedirs(save_dir, exist_ok=True)
+def get_timestamped_dir(base_dir="state_dict"):
+    timestamp = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    full_path = os.path.join(base_dir, timestamp)
+    os.makedirs(full_path, exist_ok=True)
+    return full_path
 
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
-    early_stopper = EarlyStopping(patience=5, path=save_dir)
+def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, device, num_epochs=1, patience=10, base_save_dir="state_dict"):
+    save_dir = get_timestamped_dir(base_save_dir)
+
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15, verbose=True)
+    early_stopper = EarlyStopping(patience=10, path=save_dir)
 
     # 학습 및 검증 손실을 저장할 리스트
     train_losses, val_losses = [], []
@@ -41,6 +48,11 @@ def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, d
             loss = outputs.loss
 
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(
+                list(encoder.parameters()) + list(decoder.parameters()), max_norm=1.0
+            )
+
             optimizer.step()
 
             total_loss += loss.item()
@@ -52,17 +64,26 @@ def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, d
         train_losses.append(avg_loss)
         val_losses.append(val_loss)
 
-        print(f"[Epoch {epoch+1}] Train Loss: {avg_loss:.4f}")
+        print(f"[Epoch {epoch+1}] Train Loss: {avg_loss:.4f} | Val Loss: {val_loss:.4f}")
         
         scheduler.step(val_loss)
 
-        if avg_loss <= 0.1:
-            early_stopper(val_loss, encoder, decoder)
-            if early_stopper.early_stop:
-                print(f"[Epoch {epoch+1}] Early stopping triggered")
-                break
-        else:
-            print(f"[Epoch {epoch+1}] 아직 train loss > 0.1 → early stopping 미적용")
+        # Save last (overwrite every epoch)
+        torch.save(encoder.state_dict(), os.path.join(save_dir, "encoder_last.pt"))
+        torch.save(decoder.state_dict(), os.path.join(save_dir, "decoder_last.pt"))
+        
+        # Save best if applicable
+        early_stopper(avg_loss, encoder, decoder)
+        if early_stopper.early_stop:
+            print(f"[Epoch {epoch+1}] Early stopping triggered")
+            break
+        # if avg_loss <= 0.1:
+        #     early_stopper(val_loss, encoder, decoder)
+        #     if early_stopper.early_stop:
+        #         print(f"[Epoch {epoch+1}] Early stopping triggered")
+        #         break
+        # else:
+        #     print(f"[Epoch {epoch+1}] 아직 train loss > 0.1 → early stopping 미적용")
         
     # plot 저장
     plt.plot(train_losses, label='Train Loss')
@@ -71,7 +92,7 @@ def train_model(encoder, decoder, train_dataloader, val_dataloader, optimizer, d
     plt.ylabel('Loss')
     plt.title('Training and Validation Loss')
     plt.legend()
-    plt.savefig('loss_plot_ep70_p3.png') 
+    plt.savefig('loss_plot_ep80_p15.png') 
 
 def evaluate_model(encoder, decoder, val_dataloader, device):
     encoder.eval()
@@ -94,5 +115,5 @@ def evaluate_model(encoder, decoder, val_dataloader, device):
             loss = outputs.loss
             total_loss += loss.item()
 
-    avg_loss = total_loss / len(val_dataloader)
-    return avg_loss
+    val_loss = total_loss / len(val_dataloader)
+    return val_loss
