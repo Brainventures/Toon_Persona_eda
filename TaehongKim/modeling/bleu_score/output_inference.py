@@ -12,7 +12,7 @@ all_image_dir = "/HDD/toon_persona/Training/origin"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 resnet_type = 'resnet50'
 
-inference = ImageCaptionInference("/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model_v2.pth", device, resnet_type)
+inference = ImageCaptionInference("/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model_v5.pth", device, resnet_type)
 caption_list = []
 for idx, row in test_df.iterrows():
     image_path = os.path.join(all_image_dir, row['origin'])
@@ -22,4 +22,4 @@ for idx, row in test_df.iterrows():
 
 pred_df = pd.DataFrame(test_df, columns=['origin','caption'])
 pred_df['predict'] = caption_list
-pred_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/output_v2.csv", index=False)
+pred_df.to_csv("/home/thkim/dev/eda/Toon_Persona_eda/output_v5.csv", index=False)

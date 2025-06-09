@@ -222,6 +222,47 @@ class ImageCaptionTrainer:
         
         self.train_losses = []
         self.val_losses = []
+        
+        # Resume 관련 변수들
+        self.start_epoch = 0
+        self.best_train_loss = float('inf')
+    
+    def load_checkpoint(self, checkpoint_path):
+        """체크포인트에서 모델과 옵티마이저 상태를 로드합니다."""
+        print(f"Loading checkpoint from {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+        
+        # 모델 상태 로드
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        
+        # 옵티마이저 상태 로드
+        if 'optimizer_state_dict' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            print("Optimizer state loaded")
+        
+        # 스케줄러 상태 로드 (있다면)
+        if 'scheduler_state_dict' in checkpoint:
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            print("Scheduler state loaded")
+        
+        # 에포크와 손실 정보 로드
+        self.start_epoch = checkpoint.get('epoch', 0) + 1  # 다음 에포크부터 시작
+        self.best_train_loss = checkpoint.get('train_loss', float('inf'))
+        
+        # 손실 기록 로드 (있다면)
+        if 'train_losses' in checkpoint:
+            self.train_losses = checkpoint['train_losses']
+        if 'val_losses' in checkpoint:
+            self.val_losses = checkpoint['val_losses']
+        
+        # Early stopping 상태 로드 (있다면)
+        if 'early_stopping_best_loss' in checkpoint:
+            self.early_stopping.best_loss = checkpoint['early_stopping_best_loss']
+            self.early_stopping.counter = checkpoint.get('early_stopping_counter', 0)
+        
+        print(f"Resuming from epoch {self.start_epoch}, best train loss: {self.best_train_loss:.4f}")
+        
+        return checkpoint
     
     def train_epoch(self):
         self.model.train()
@@ -259,10 +300,24 @@ class ImageCaptionTrainer:
         
         return total_loss / len(self.val_loader)
     
-    def train(self, epochs=50, save_path="image_caption_model.pth"):
-        best_train_loss = float('inf')
+    def train(self, epochs=50, save_path="image_caption_model.pth", resume_from=None):
+        """
+        모델을 학습합니다.
         
-        for epoch in range(epochs):
+        Args:
+            epochs: 총 학습할 에포크 수
+            save_path: 모델을 저장할 경로
+            resume_from: 이어서 학습할 체크포인트 경로 (None이면 처음부터 학습)
+        """
+        
+        # 체크포인트에서 이어서 학습하는 경우
+        if resume_from and os.path.exists(resume_from):
+            self.load_checkpoint(resume_from)
+            print(f"Resuming training from epoch {self.start_epoch}")
+        else:
+            print("Starting training from scratch")
+        
+        for epoch in range(self.start_epoch, epochs):
             print(f"Epoch {epoch+1}/{epochs}")
             
             train_loss = self.train_epoch()
@@ -274,16 +329,23 @@ class ImageCaptionTrainer:
             print(f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             
             # 최고 성능 모델 저장
-            if train_loss < best_train_loss:
-                best_train_loss = train_loss
-                torch.save({
+            if train_loss < self.best_train_loss:
+                self.best_train_loss = train_loss
+                checkpoint = {
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scheduler_state_dict': self.scheduler.state_dict(),
                     'tokenizer': self.tokenizer,
                     'epoch': epoch,
-                    'train_loss': train_loss
-                }, save_path)
-                print(f"Best model saved with val_loss: {val_loss:.4f}")
+                    'train_loss': train_loss,
+                    'val_loss': val_loss,
+                    'train_losses': self.train_losses,
+                    'val_losses': self.val_losses,
+                    'early_stopping_best_loss': self.early_stopping.best_loss,
+                    'early_stopping_counter': self.early_stopping.counter
+                }
+                torch.save(checkpoint, save_path)
+                print(f"Best model saved with train_loss: {train_loss:.4f}")
             
             # Early stopping 체크
             if self.early_stopping(train_loss, self.model):
@@ -457,17 +519,31 @@ def main():
     # 모델 초기화 (ResNet freeze 활성화)
     model = ImageCaptionModel(vocab_size=tokenizer.vocab_size, resnet_type=resnet_type, freeze_resnet=True)
     
-    # 트레이너 초기화 및 학습 (patience로 early stopping 설정)
+    # 트레이너 초기화
     trainer = ImageCaptionTrainer(model, tokenizer, train_loader, val_loader, device, patience=13)
-    trainer.train(epochs=50, save_path="/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model.pth")
+    
+    # 체크포인트 경로
+    checkpoint_path = "/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model.pth"
+    
+    # 이어서 학습할지 선택
+    resume_training = True  # False로 설정하면 처음부터 학습
+    
+    if resume_training and os.path.exists(checkpoint_path):
+        print("=== 이어서 학습 모드 ===")
+        # 기존 50에폭에서 추가로 50에폭 더 학습 (총 100에폭)
+        trainer.train(epochs=100, save_path=checkpoint_path, resume_from=checkpoint_path)
+    else:
+        print("=== 새로운 학습 모드 ===")
+        # 처음부터 50에폭 학습
+        trainer.train(epochs=50, save_path=checkpoint_path)
     
     # 손실 그래프 출력
     loss_plot_path = "/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/training_losses.png"
-    # trainer.plot_losses(loss_plot_path)
+    trainer.plot_losses(loss_plot_path)
     
     # 추론 예제
     print("\n=== 추론 예제 ===")
-    inference = ImageCaptionInference("/home/thkim/dev/eda/Toon_Persona_eda/TaehongKim/model/best_resnet_caption_model.pth", device, resnet_type)
+    inference = ImageCaptionInference(checkpoint_path, device, resnet_type)
     
     # 테스트 이미지로 캡션 생성
     test_images = val_df.head(10)
