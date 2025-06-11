@@ -16,8 +16,9 @@ __pycache__/
 *.pth
 checkpoint/
 output/
+backup/
 
-
+*.png
 
 test.py
 test_v2.py
